@@ -1,0 +1,13 @@
+langchain==0.3.*
+langchain-community==0.3.*
+langchain-ollama==0.2.*
+chromadb==0.5.*
+python-dotenv==1.0.*
+pypdf==4.*
+docx2txt==0.8
+unstructured[md,epub]==0.14.*
+pytest==8.*
+fastapi==0.115.*
+uvicorn==0.30.*
+python-multipart==0.0.*
+requests==2.*
