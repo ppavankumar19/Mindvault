@@ -1,0 +1,34 @@
+Introduction to Retrieval-Augmented Generation (RAG)
+
+RAG is a technique that combines information retrieval with large language model generation.
+Instead of relying solely on the model's trained knowledge, RAG fetches relevant documents
+from a knowledge base and uses them as context when generating answers.
+
+How RAG Works:
+1. The user submits a question.
+2. The question is converted into an embedding (a vector representation).
+3. The embedding is used to search a vector database for similar document chunks.
+4. The top-K most relevant chunks are retrieved.
+5. These chunks are passed as context to the LLM along with the question.
+6. The LLM generates an answer grounded in the retrieved context.
+
+Benefits of RAG:
+- Reduces hallucinations by grounding answers in real documents.
+- Allows the model to access up-to-date or domain-specific information.
+- Provides source citations so users can verify answers.
+- Works with smaller, cheaper models since knowledge is external.
+
+Vector Databases:
+A vector database stores embeddings (numerical representations of text) and allows
+fast similarity search. ChromaDB is a popular local vector database used in RAG systems.
+It supports cosine similarity search and can persist data to disk.
+
+Embedding Models:
+Text embeddings convert sentences and paragraphs into high-dimensional vectors.
+Similar pieces of text will have similar vectors. The nomic-embed-text model produces
+768-dimensional vectors and runs locally via Ollama.
+
+Local LLMs with Ollama:
+Ollama makes it easy to run large language models locally on consumer hardware.
+Models like llama3.2:3b (3 billion parameters) can run on a CPU-only machine with 8GB RAM.
+This enables fully private, offline AI applications.
