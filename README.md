@@ -67,6 +67,161 @@ RAG gives near-fine-tuning quality at zero cost and with full privacy.
 
 ---
 
+## RAG Implementation in This Project
+
+Here is exactly how RAG is implemented across the codebase, end to end.
+
+### 1. Document Ingestion — `core/ingestion.py`
+
+When you upload a file and click **Ingest**, this pipeline runs:
+
+```
+PDF / TXT / MD / DOCX
+        │
+        ▼
+  load_document()          ← picks the right LangChain loader by file extension
+        │
+        ▼
+  split_documents()        ← RecursiveCharacterTextSplitter
+        │  chunk_size=800 chars, overlap=150 chars
+        │  separators: ["\n\n", "\n", ". ", " ", ""]
+        ▼
+  chunks[]                 ← each chunk carries metadata:
+                              { source, page, doc_id, chunk_index }
+```
+
+Each document gets a unique `doc_id` (UUID). Chunks overlap by 150 characters so context is never lost at boundaries.
+
+### 2. Embedding — `core/embeddings.py`
+
+After chunking, every chunk is converted to a 768-dimensional vector:
+
+```python
+OllamaEmbeddings(model="nomic-embed-text", base_url="http://localhost:11434")
+```
+
+- Runs **locally** via Ollama — no API call, no internet
+- Same model is used at query time so vectors are comparable
+- 768 dimensions captures semantic meaning, not just keywords
+
+### 3. Vector Store — `core/vector_store.py`
+
+Embeddings are stored in **ChromaDB**, a local persistent vector database:
+
+```python
+Chroma(
+    collection_name=collection_name,
+    embedding_function=embedding_model,
+    persist_directory="./data/chroma_db",
+)
+```
+
+- Collections map to named knowledge bases (configurable in the UI)
+- Data persists to disk — no need to re-ingest on restart
+- Supports multiple collections (e.g. one per project or topic)
+
+### 4. Retrieval — `core/retriever.py`
+
+At query time, the user's question is embedded with the same model and compared against all stored chunk vectors using **cosine similarity**:
+
+```
+User question
+      │
+      ▼
+nomic-embed-text → 768-dim query vector
+      │
+      ▼
+ChromaDB cosine similarity search
+      │
+      ▼
+top-K most relevant chunks (default K=5, adjustable in UI)
+```
+
+Cosine similarity finds chunks that are *semantically* close to the question — not just matching keywords.
+
+### 5. Prompt Construction — `core/chain.py`
+
+The retrieved chunks are injected into a structured prompt alongside the conversation history:
+
+```
+System:
+  You are a helpful assistant. Answer ONLY using the provided context.
+  If the answer is not in the context, say you don't know.
+  Cite the source document and page number at the end.
+
+Context:
+  [chunk 1 text]
+  [chunk 2 text]
+  ...
+
+Conversation History:
+  [last 5 exchanges]
+
+Question: {user's question}
+
+Answer:
+```
+
+This grounds the LLM — it cannot hallucinate facts that aren't in the retrieved chunks.
+
+### 6. LLM Generation — `core/llm.py`
+
+The prompt is sent to a locally running Ollama model:
+
+```python
+OllamaLLM(model="llama3.2:3b", temperature=0.1, base_url="http://localhost:11434")
+```
+
+- `temperature=0.1` keeps answers focused and factual (low randomness)
+- The model reads the injected context and generates a grounded answer
+- Source citations are enforced by the prompt rules
+
+### 7. Conversational Memory — `core/chain.py`
+
+The chain uses `ConversationBufferWindowMemory` to remember the last 5 exchanges:
+
+```python
+ConversationBufferWindowMemory(k=5, memory_key="chat_history", return_messages=True)
+```
+
+This means follow-up questions work naturally — you can ask "what did it say about X?" and the chain knows what X refers to.
+
+### 8. API Layer — `server.py`
+
+All of the above is exposed through a FastAPI REST backend. The browser talks to it via `fetch()`:
+
+```
+Browser                    FastAPI (server.py)             Core Modules
+  │                              │                              │
+  │── POST /api/ingest ─────────►│── load_and_split() ────────►│ ingestion.py
+  │                              │── get_embedding_model() ───►│ embeddings.py
+  │                              │── add_documents() ─────────►│ vector_store.py
+  │                              │                              │
+  │── POST /api/chat ───────────►│── run_chain() ─────────────►│ chain.py
+  │◄── { answer, sources } ──────│                              │
+```
+
+### Full RAG Flow Summary
+
+```
+[Upload file]
+      │
+      ├── load_document()          core/ingestion.py
+      ├── split_documents()        core/ingestion.py
+      ├── get_embedding_model()    core/embeddings.py
+      └── add_documents()          core/vector_store.py
+
+[Ask question]
+      │
+      ├── embed question           core/embeddings.py
+      ├── cosine similarity search core/retriever.py  → top-K chunks
+      ├── build prompt             core/chain.py      → context + history + question
+      ├── send to Ollama LLM       core/llm.py        → answer text
+      └── return {answer, sources} server.py          → browser renders
+```
+
+---
+
 ## Models Used
 
 ### LLM — Answer Generation
@@ -232,4 +387,4 @@ mindvault/
 
 ## License
 
-MIT © 2025
+MIT © 2026
